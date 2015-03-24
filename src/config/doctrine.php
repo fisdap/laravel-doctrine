@@ -70,21 +70,38 @@ return array(
  	/*
 	|--------------------------------------------------------------------------
 	| Cache providers, supports apc, xcache, memcache, redis
-	| Only redis and memcache have additionals configurations
+	| Only Couchbase, Redis, and Memcache have additional configuration
 	|--------------------------------------------------------------------------
 	*/
 	'cache' => array(
-		'provider' => 'redis',
+		'default_provider' => 'redis',
 
-		'redis' => array(
-			'host'     => '127.0.0.1',
-			'port'     => 6379,
-			'database' => 1
-		),
+		//'metadata_provider' => 'redis',
 
-		'memcache' => array(
-			'host' => '127.0.0.1', 
-			'port' => 11211
+		//'query_provider' => 'redis',
+
+		//'result_provider' => 'redis',
+
+		'providers' => array(
+
+			'couchbase' => array(
+				'hosts'      => array('127.0.0.1'),
+				'user'       => null,
+				'password'   => null,
+				'bucket'     => 'default',
+				'persistent' => true
+			),
+
+			'redis' => array(
+				'host'     => '127.0.0.1',
+				'port'     => 6379,
+				'database' => 1
+			),
+
+			'memcache' => array(
+				'host' => '127.0.0.1',
+				'port' => 11211
+			)
 		)
 	),
 

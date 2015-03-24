@@ -1,5 +1,14 @@
 <?php namespace Atrauzzi\LaravelDoctrine;
 
+use Doctrine\Common\Cache\ApcCache;
+use Doctrine\Common\Cache\ArrayCache;
+use Doctrine\Common\Cache\CacheProvider;
+use Doctrine\Common\Cache\CouchbaseCache;
+use Doctrine\Common\Cache\MemcacheCache;
+use Doctrine\Common\Cache\MemcachedCache;
+use Doctrine\Common\Cache\RedisCache;
+use Doctrine\Common\Cache\XcacheCache;
+use Illuminate\Config\Repository;
 use Illuminate\Support\ServiceProvider as Base;
 use Doctrine\Common\EventManager;
 use Doctrine\ORM\Tools\Setup;
@@ -41,120 +50,42 @@ class ServiceProvider extends Base {
 		$this->app->singleton('Doctrine\ORM\EntityManager', function ($app) {
 
 			// Retrieve our configuration.
-			/** @var \Illuminate\Config\Repository $config */
+			/** @var Repository $config */
 			$config = $app['config'];
 			$connection = $config->get('laravel-doctrine::doctrine.connection');
 			$devMode = $config->get('laravel-doctrine::doctrine.devMode', $config->get('app.debug'));
 
-			$cache = null; // Default, let Doctrine decide.
+			$doctrine_config = Setup::createConfiguration(
+				$devMode,
+				$config->get('laravel-doctrine::doctrine.proxy_classes.directory'),
+				NULL
+			);
 
-			if(!$devMode) {
+			$annotation_driver = $doctrine_config->newDefaultAnnotationDriver(
+				$config->get('laravel-doctrine::doctrine.metadata'),
+				$config->get('laravel-doctrine::doctrine.use_simple_annotation_reader')
+			);
 
-				$cache_config = $config->get('laravel-doctrine::doctrine.cache');
-				$cache_provider = $cache_config['provider'];
-				$cache_provider_config = $cache_config[$cache_provider];
-
-				switch($cache_provider) {
-
-					case 'apc':
-						if(extension_loaded('apc')) {
-							$cache = new \Doctrine\Common\Cache\ApcCache();
-						}
-						break;
-
-					case 'xcache':
-						if(extension_loaded('xcache')) {
-							$cache = new \Doctrine\Common\Cache\XcacheCache();
-						}
-						break;
-
-					case 'memcache':
-						if(extension_loaded('memcache')) {
-							$memcache = new \Memcache();
-							$memcache->connect($cache_provider_config['host'], $cache_provider_config['port']);
-							$cache = new \Doctrine\Common\Cache\MemcacheCache();
-							$cache->setMemcache($memcache);
-						}
-						break;
-
-					case 'memcached':
-						if(extension_loaded('memcached')) {
-							$memcache = new \Memcached();
-							$memcache->addServer($cache_provider_config['host'], $cache_provider_config['port']);
-							$cache = new \Doctrine\Common\Cache\MemcachedCache();
-							$cache->setMemcached($memcache);
-						}
-						break;
-
-					case 'couchbase':
-						if(extension_loaded('couchbase')) {
-							$couchbase = new \Couchbase(
-								$cache_provider_config['hosts'],
-								$cache_provider_config['user'],
-								$cache_provider_config['password'],
-								$cache_provider_config['bucket'],
-								$cache_provider_config['persistent']
-							);
-							$cache = new \Doctrine\Common\Cache\CouchbaseCache();
-							$cache->setCouchbase($couchbase);
-						}
-						break;
-
-					case 'redis':
-						if(extension_loaded('redis')) {
-							$redis = new \Redis();
-							$redis->connect($cache_provider_config['host'], $cache_provider_config['port']);
-
-							if ($cache_provider_config['database']) {
-								$redis->select($cache_provider_config['database']);
-							}
-
-							$cache = new \Doctrine\Common\Cache\RedisCache();
-							$cache->setRedis($redis);
-						}
-						break;
-
-					default:
-						$cache = new \Doctrine\Common\Cache\ArrayCache();
-						break;
-				}
-
-				// optionally set cache namespace
-				if (isset($cache_provider_config['namespace'])) {
-					if ($cache instanceof \Doctrine\Common\Cache\CacheProvider) {
-						$cache->setNamespace($cache_provider_config['namespace']);
-					}
-				}
+			if ($config->get('laravel-doctrine::doctrine.driverChain.enabled')) {
+				$driver_chain = new DriverChain();
+				$driver_chain->addDriver($annotation_driver, $config->get('laravel-doctrine::doctrine.driverChain.defaultNamespace'));
+				$doctrine_config->setMetadataDriverImpl($driver_chain);
+			} else {
+				$doctrine_config->setMetadataDriverImpl($annotation_driver);
 			}
-
-                        $doctrine_config = Setup::createConfiguration(
-                            $devMode,
-                            $config->get('laravel-doctrine::doctrine.proxy_classes.directory'),
-                            NULL
-                        );
-                        
-                        $annotation_driver = $doctrine_config->newDefaultAnnotationDriver(
-                            $config->get('laravel-doctrine::doctrine.metadata'), 
-                            $config->get('laravel-doctrine::doctrine.use_simple_annotation_reader')
-                        );
-                        
-                        if ($config->get('laravel-doctrine::doctrine.driverChain.enabled')) {
-                            $driver_chain = new DriverChain();
-                            $driver_chain->addDriver($annotation_driver, $config->get('laravel-doctrine::doctrine.driverChain.defaultNamespace'));
-                            $doctrine_config->setMetadataDriverImpl($driver_chain);
-                        } else {
-                            $doctrine_config->setMetadataDriverImpl($annotation_driver);
-                        }  
                         
 			/*
 			 * set cache implementations
 			 * must occur after Setup::createAnnotationMetadataConfiguration() in order to set custom namespaces properly
 			 */
-			if ($cache !== null) {
-				$doctrine_config->setMetadataCacheImpl($cache);
-				$doctrine_config->setQueryCacheImpl($cache);
-				$doctrine_config->setResultCacheImpl($cache);
+			if(!$devMode) {
+				$defaultCacheProvider = $this->getCacheProvider($config, 'default');
+
+				$doctrine_config->setMetadataCacheImpl($this->getCacheProvider($config, 'metadata') ?: $defaultCacheProvider);
+				$doctrine_config->setQueryCacheImpl($this->getCacheProvider($config, 'query') ?: $defaultCacheProvider);
+				$doctrine_config->setResultCacheImpl($this->getCacheProvider($config, 'result') ?: $defaultCacheProvider);
 			}
+
 
 			$doctrine_config->setAutoGenerateProxyClasses(
 				$config->get('laravel-doctrine::doctrine.proxy_classes.auto_generate')
@@ -185,6 +116,7 @@ class ServiceProvider extends Base {
 			return new SchemaTool($app['Doctrine\ORM\EntityManager']);
 		});
 
+
 		//
 		// Utilities
 		//
@@ -199,6 +131,7 @@ class ServiceProvider extends Base {
 			$proxy = 'Doctrine\Common\Persistence\Proxy';
 			return new DoctrineRegistry('doctrine', $connections, $managers, $connections[0], $managers['doctrine'], $proxy);
 		});
+
 
 		//
 		// String name re-bindings.
@@ -225,6 +158,7 @@ class ServiceProvider extends Base {
 		$this->app->singleton('doctrine.connection', function ($app) {
 			return $app['doctrine']->getConnection();
 		});
+
 
 		//
 		// Commands
@@ -253,6 +187,98 @@ class ServiceProvider extends Base {
 			'Doctrine\ORM\Tools\SchemaTool',
 			'doctrine.registry'
 		);
+	}
+
+
+	/**
+	 * @param Repository $config
+	 * @param string     $cacheType    default, metadata, query, or result
+	 *
+	 * @return CacheProvider|null
+	 */
+	private function getCacheProvider(Repository $config, $cacheType)
+	{
+		$cache = null;
+
+		$cache_provider = $config->get("laravel-doctrine::doctrine.cache.{$cacheType}_provider");
+
+		if ($cache_provider === null) return $cache;
+
+		$cache_provider_config = $config->get("laravel-doctrine::doctrine.cache.providers.$cache_provider");
+
+		switch($cache_provider) {
+
+			case 'apc':
+				if(extension_loaded('apc')) {
+					$cache = new ApcCache();
+				}
+				break;
+
+			case 'xcache':
+				if(extension_loaded('xcache')) {
+					$cache = new XcacheCache();
+				}
+				break;
+
+			case 'memcache':
+				if(extension_loaded('memcache')) {
+					$memcache = new \Memcache();
+					$memcache->connect($cache_provider_config['host'], $cache_provider_config['port']);
+					$cache = new MemcacheCache();
+					$cache->setMemcache($memcache);
+				}
+				break;
+
+			case 'memcached':
+				if(extension_loaded('memcached')) {
+					$memcache = new \Memcached();
+					$memcache->addServer($cache_provider_config['host'], $cache_provider_config['port']);
+					$cache = new MemcachedCache();
+					$cache->setMemcached($memcache);
+				}
+				break;
+
+			case 'couchbase':
+				if(extension_loaded('couchbase')) {
+					$couchbase = new \Couchbase(
+						$cache_provider_config['hosts'],
+						$cache_provider_config['user'],
+						$cache_provider_config['password'],
+						$cache_provider_config['bucket'],
+						$cache_provider_config['persistent']
+					);
+					$cache = new CouchbaseCache();
+					$cache->setCouchbase($couchbase);
+				}
+				break;
+
+			case 'redis':
+				if(extension_loaded('redis')) {
+					$redis = new \Redis();
+					$redis->connect($cache_provider_config['host'], $cache_provider_config['port']);
+
+					if ($cache_provider_config['database']) {
+						$redis->select($cache_provider_config['database']);
+					}
+
+					$cache = new RedisCache();
+					$cache->setRedis($redis);
+				}
+				break;
+
+			default:
+				$cache = new ArrayCache();
+				break;
+		}
+
+		// optionally set cache namespace
+		if (isset($cache_provider_config['namespace'])) {
+			if ($cache instanceof CacheProvider) {
+				$cache->setNamespace($cache_provider_config['namespace']);
+			}
+		}
+
+		return $cache;
 	}
 
 }
