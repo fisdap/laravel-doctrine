@@ -10,8 +10,8 @@
         }
     ],
     "require": {
-        "illuminate/support": “~5”,
-	"doctrine/orm": "2.*",
+        "illuminate/support": "~5",
+        "doctrine/orm": "2.*",
         "doctrine/migrations": "dev-master"
     },
     "autoload": {
