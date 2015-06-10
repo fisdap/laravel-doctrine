@@ -26,7 +26,10 @@ class ServiceProvider extends Base {
 	 * @return void
 	 */
 	public function boot() {
-		$this->publishes([__DIR__ .'/..'. '/config/doctrine.php'=> config_path('doctrine.php')], 'config');
+		$this->publishes(
+			[
+				realpath(__DIR__ .'/../../config/doctrine.php') => config_path('doctrine.php')
+			]);
 	}
 
 	/**
