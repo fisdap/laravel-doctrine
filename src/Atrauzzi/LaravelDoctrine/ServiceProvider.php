@@ -21,19 +21,12 @@ use Doctrine\ORM\Mapping\Driver\DriverChain;
 class ServiceProvider extends Base {
 
 	/**
-	 * Indicates if loading of the provider is deferred.
-	 *
-	 * @var bool
-	 */
-	protected $defer = false;
-
-	/**
 	 * Bootstrap the application events.
 	 *
 	 * @return void
 	 */
 	public function boot() {
-		$this->package('atrauzzi/laravel-doctrine');
+		$this->publishes([__DIR__ .'/..'. '/config/doctrine.php'=> config_path('doctrine.php')], 'config');
 	}
 
 	/**
@@ -42,7 +35,6 @@ class ServiceProvider extends Base {
 	 * @return void
 	 */
 	public function register() {
-		$this->package('atrauzzi/laravel-doctrine');
 
 		//
 		// Doctrine
