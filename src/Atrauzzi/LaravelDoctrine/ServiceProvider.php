@@ -47,23 +47,23 @@ class ServiceProvider extends Base {
 			// Retrieve our configuration.
 			/** @var Repository $config */
 			$config = $app['config'];
-			$connection = $config->get('laravel-doctrine::doctrine.connection');
-			$devMode = $config->get('laravel-doctrine::doctrine.devMode', $config->get('app.debug'));
+			$connection = $config->get('doctrine.connection');
+			$devMode = $config->get('doctrine.devMode', $config->get('app.debug'));
 
 			$doctrine_config = Setup::createConfiguration(
 				$devMode,
-				$config->get('laravel-doctrine::doctrine.proxy_classes.directory'),
+				$config->get('doctrine.proxy_classes.directory'),
 				NULL
 			);
 
 			$annotation_driver = $doctrine_config->newDefaultAnnotationDriver(
-				$config->get('laravel-doctrine::doctrine.metadata'),
-				$config->get('laravel-doctrine::doctrine.use_simple_annotation_reader')
+				$config->get('doctrine.metadata'),
+				$config->get('doctrine.use_simple_annotation_reader')
 			);
 
-			if ($config->get('laravel-doctrine::doctrine.driverChain.enabled')) {
+			if ($config->get('doctrine.driverChain.enabled')) {
 				$driver_chain = new DriverChain();
-				$driver_chain->addDriver($annotation_driver, $config->get('laravel-doctrine::doctrine.driverChain.defaultNamespace'));
+				$driver_chain->addDriver($annotation_driver, $config->get('doctrine.driverChain.defaultNamespace'));
 				$doctrine_config->setMetadataDriverImpl($driver_chain);
 			} else {
 				$doctrine_config->setMetadataDriverImpl($annotation_driver);
@@ -83,14 +83,14 @@ class ServiceProvider extends Base {
 
 
 			$doctrine_config->setAutoGenerateProxyClasses(
-				$config->get('laravel-doctrine::doctrine.proxy_classes.auto_generate')
+				$config->get('doctrine.proxy_classes.auto_generate')
 			);
 
-			$doctrine_config->setDefaultRepositoryClassName($config->get('laravel-doctrine::doctrine.defaultRepository'));
+			$doctrine_config->setDefaultRepositoryClassName($config->get('doctrine.defaultRepository'));
 
-			$doctrine_config->setSQLLogger($config->get('laravel-doctrine::doctrine.sqlLogger'));
+			$doctrine_config->setSQLLogger($config->get('doctrine.sqlLogger'));
 
-			$proxy_class_namespace = $config->get('laravel-doctrine::doctrine.proxy_classes.namespace');
+			$proxy_class_namespace = $config->get('doctrine.proxy_classes.namespace');
 			if ($proxy_class_namespace !== null) {
 				$doctrine_config->setProxyNamespace($proxy_class_namespace);
 			}
@@ -195,11 +195,11 @@ class ServiceProvider extends Base {
 	{
 		$cache = null;
 
-		$cache_provider = $config->get("laravel-doctrine::doctrine.cache.{$cacheType}_provider");
+		$cache_provider = $config->get("doctrine.cache.{$cacheType}_provider");
 
 		if ($cache_provider === null) return $cache;
 
-		$cache_provider_config = $config->get("laravel-doctrine::doctrine.cache.providers.$cache_provider");
+		$cache_provider_config = $config->get("doctrine.cache.providers.$cache_provider");
 
 		switch($cache_provider) {
 
