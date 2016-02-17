@@ -16,6 +16,7 @@ use Doctrine\ORM\Events;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Tools\SchemaTool;
 use Doctrine\ORM\Mapping\Driver\DriverChain;
+use Doctrine\Common\Proxy\Autoloader as ProxyAutoloader;
 
 
 class ServiceProvider extends Base {
@@ -30,6 +31,12 @@ class ServiceProvider extends Base {
 			[
 				realpath(__DIR__ .'/../../config/doctrine.php') => config_path('doctrine.php')
 			]);
+
+		$em = $this->app->make('Doctrine\ORM\EntityManager');
+
+		ProxyAutoloader::register(
+			realpath($em->getConfiguration()->getProxyDir()), $em->getConfiguration()->getProxyNamespace()
+		);
 	}
 
 	/**
